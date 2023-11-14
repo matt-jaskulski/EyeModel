@@ -1,0 +1,490 @@
+classdef EyeModel
+%
+% A four-surface eye model as described in Bennett and Rabbets.
+% A reduced one-surface eye model is also computed.
+% Larry N Thibos, Jos Rozema, Matt Jaskulski
+%
+% All units of distance are [mm]
+% All units of power are [mD], except when they are displayed by one of the
+% display methods of the class.
+%
+% Usage:
+% >> eye = EyeModel
+% >> eye.cornea
+% >> eye.crystalline
+% >> eye.reduced
+%
+% Matt's beautiful ASCII Emsley eye:
+%
+% Ref. ID       n0   n1   n2   n3  n4
+%                   / /        ^                              \
+%                  | |        / \                             |
+% -.-.-.-.-.-.-.-.-( (-.-.-.-(   ).-.-.-.-.-.-.-.-.-.-.-.-.-.-).-.-.-.-.-.-
+%                  | |        \ /                             |
+%                   \ \        v                              /
+% Surface ID        0 1       2 3                          retina
+%
+% Units:
+% - distances: [mm]
+% - powers: 1E-3 [D] (multiply by 1000 to display as [D])
+%
+
+    properties        
+        %% DEFAULT Parameters - Geometrical Optics
+        % These parameters will be the same for all eyes created with the
+        % model and unless you mess them up they yield an emmetropic eye.
+
+        n0      = 1.000;                    % Refractive index of air [1]
+
+        % Cornea
+                                            % Radii of curvature
+        r0      = 7.800;                    % First corneal surface radius [mm]
+        r1      = 7.800;                    % Second corneal surface radius [mm]
+
+        d01     = 0.000;                    % Separation, thickness of cornea [mm]
+
+        n1      = 1.336;                    % Refractive index [1.336]
+
+        % Aqueous Humor
+
+        n2      = 1.336;                    % Refractive index [1.336]
+        d12     = 3.600;                    % Separation, anterior chamber depth [mm]
+
+        % Crystalline
+                                            % Radii of curvature
+        r2      = 11.000;                   % First crystalline surface radius [mm]
+        r3      = -6.47515;                 % Second crystalline surface radius [mm]
+
+        d23     = 3.700;                    % Separation, thickness of the crystalline [mm]
+
+        n3      = 1.422;                    % Refractive index [1.422]
+
+        % Vitreous Humor
+
+        n4 = 1.336;                         % Refractive index [1.336]
+        al = 24.0859;                       % Axial length of the eye [mm] [24.0859]
+
+        %% Scales
+
+        scale = struct( 'uniform',  1.0,...
+                        'r0',       1.0,...
+                        'r1',       1.0,...
+                        'd01',      1.0,...
+                        'd12',      1.0,...
+                        'r2',       1.0,...
+                        'r3',       1.0,...
+                        'd23',      1.0,...
+                        'al',       1.0);
+        
+        %% Surfaces
+        
+        cornea = struct();
+        crystalline = struct();
+        reduced = struct();
+            
+    end
+    
+    methods
+        
+        %% Constructor. It gets the first argument (eye) silently.
+        
+        function eye = EyeModel()
+            %EYEMODEL Constructs an emmetropic eye based on the Bennett-Rabbets 4-surface eye model.
+            
+            eye = eye.recompute();
+            
+        end
+        
+        function eye = recompute(eye)
+            
+            eye = EyeModel.computeCornea(eye);
+            eye = EyeModel.computeCrystalline(eye);
+            eye = EyeModel.computeReduced(eye);
+            
+        end
+        
+        function eye = rescale(eye, uniform, scales)
+
+            eye.scale.uniform = uniform;
+
+            if(nargin == 3) 
+                fields = fieldnames(scales);
+                for f = 1:length(fields)
+                    
+                    if(~isnan(eye.scale.(fields{f})))
+                        eye.scale.(fields{f}) = scales.(fields{f});
+                    end
+                    
+                end 
+            end
+            
+            eye = eye.recompute();
+            
+        end
+       
+        
+        %% Setters
+        
+        function eye = setAxialLength(eye, newAxialLength)
+        % The default value for the emmetropic eye is 24.0859 mm.
+            eye.al = newAxialLength;
+            eye = eye.recompute();   
+        end
+  
+        function eye = setCornealRadius(eye, r)
+        % The default value for the emmetropic eye is 7.800 mm.
+            eye.r0 = r;
+            eye.r1 = r;
+            eye = eye.recompute();   
+        end
+        
+        function eye = setAnteriorChamberDepth(eye, acd)
+        % The default value for the emmetropic eye is 3.600 mm.
+            eye.d12 = acd;
+            eye = eye.recompute();  
+        end
+        
+        function eye = setAqueousRefractiveIndex(eye, n2)
+        % The default value for the emmetropic eye is 1.336.
+            eye.n2 = n2;
+            eye = eye.recompute();
+        end
+        
+        function eye = setAnteriorLensRadius(eye, r2)
+        % The default value for the emmetropic eye is 11.000 mm.
+            eye.r2 = r2;
+            eye = eye.recompute();   
+        end
+        
+        function eye = setPosteriorLensRadius(eye, r3)
+        % The default value for the emmetropic eye is -6.47515 mm.
+            eye.r3 = r3;
+            eye = eye.recompute();
+        end
+        
+        function eye = setCrystallineRefractiveIndex(eye, n3)
+        % The default value for the emmetropic eye is 1.422.
+            eye.n3 = n3;
+            eye = eye.recompute();
+        end
+
+        function eye = setLensThickness(eye, d23)
+        % The default value for the emmetropic eye is 3.700 mm.
+            eye.d23 = d23;
+            eye = eye.recompute();
+        end
+        
+        function eye = setVitrealChamberDepth(eye, vcd)
+        % The Vitreal Chamber Depth is set by means of adjusting the Axial Length of the eye.
+        % The default value for the emmetropic eye is 16.7859 mm.
+            eye.al = eye.crystalline.z3 + vcd;
+            eye = eye.recompute();       
+        end
+        
+        function eye = setVitreousRefractiveIndex(eye, n4)
+        % The default value for the emmetropic eye is 1.336.
+            eye.n4 = n4;
+            eye = eye.recompute();
+        end
+        
+        function eye = setAxialElongation(eye, elongation)
+        % The default value for the emmetropic eye is 1.000x.
+            eye.d01 = eye.d01 * elongation;
+            eye.d12 = eye.d12 * elongation;
+            eye.d23 = eye.d23 * elongation;
+            eye.al  = eye.al  * elongation;
+            eye = eye.recompute();
+        end
+        
+        
+        %% Getters
+        
+        function F = getEquivalentPower(eye) 
+            F = eye.reduced.F * 1000; 
+        end
+        
+        function k = getDioptricLength(eye)
+            k = eye.reduced.k * 1000;
+        end
+        
+        function K = getRefractiveError(eye)
+            K = eye.reduced.K * 1000;
+        end
+        
+        function al = getAxialLength(eye)
+            al = eye.reduced.al;
+        end
+        
+        function acd = getAnteriorChamberDepth(eye)
+            acd = eye.crystalline.d12;
+        end
+        
+        function n2 = getAqueousRefractiveIndex(eye)
+            n2 = eye.n2;
+        end
+        
+        function ct = getCrystallineThickness(eye)
+            ct = eye.crystalline.d23;
+        end
+        
+        function n3 = getCrystallineRefractiveIndex(eye)
+            n3 = eye.n3;
+        end
+        
+        function vcd = getVitrealChamberDepth(eye)
+            vcd = eye.reduced.al - eye.crystalline.z3;
+        end
+        
+        function n4 = getVitreousRefractiveIndex(eye)
+            n4 = eye.n4;
+        end
+        
+        function r = getCornealRadius(eye)
+            r = eye.cornea.r0;
+        end
+        
+        function r2 = getAnteriorLensRadius(eye)
+            r2 = eye.crystalline.r2;
+        end
+        
+        function r3 = getPosteriorLensRadius(eye)
+            r3 = eye.crystalline.r3;
+        end
+        
+        function d23 = getLensThickness(eye)
+            d23 = eye.crystalline.d23;
+        end
+        
+        %% Output
+        
+        function printSummary(eye)
+            fprintf('\nReduced Optical System (Scale: %1.2fx):\n\nFocal length f = %3.2fmm\nFocal length f'' = %3.2fmm\nEquivalent Power F = %3.2fD\nReduced length z'' = %3.2fmm\nDioptric length K'' = %3.2fD\nRefractive error K = %3.2fD\n\n',...
+                    eye.scale.uniform, eye.reduced.flo, eye.reduced.fli, eye.reduced.F, eye.reduced.z, eye.reduced.k, eye.reduced.K);
+        end
+        
+        function plotSummary(eye, fid)
+            
+            if(nargin < 2)
+                fid = 501;
+            end
+
+            figure(fid);
+
+                subplot(2,1,1);
+
+                    stem(eye.cornea.z0, 1, 'Marker', '^', 'Color', 'r'); hold on;
+                    stem(eye.cornea.z0, -1,'Marker', 'v', 'Color', 'r');
+
+                    stem(eye.cornea.z1, 1, 'Marker', '^', 'Color', 'r');
+                    stem(eye.cornea.z1,-1, 'Marker', 'v', 'Color', 'r');
+
+                    stem(eye.crystalline.z2, 1, 'Marker', '^', 'Color', 'b');
+                    stem(eye.crystalline.z2,-1, 'Marker', 'v', 'Color', 'b');
+
+                    stem(eye.crystalline.z3, 1, 'Marker', '^', 'Color', 'b');
+                    stem(eye.crystalline.z3,-1, 'Marker', 'v', 'Color', 'b');
+
+                    stem(eye.reduced.al, 1, 'Color', 'k');
+                    stem(eye.reduced.al,-1, 'Color', 'k');
+
+                    hold off;
+
+                    grid on; grid minor;
+                    xlabel('Axial Position [mm]');
+                    xlim([eye.cornea.z0-1 eye.reduced.al+1]);
+                    ylim([-1.2 1.2]);
+                    title('Eye Geometry');
+
+                subplot(2,1,2);
+
+                stem(eye.reduced.PP1,   1, 'Marker', '<', 'Color', 'k'); hold on;
+                stem(eye.reduced.PP2,  -1, 'Marker', '>', 'Color', 'k');
+                stem(eye.cornea.PP1,    1, 'Marker', '<', 'Color', 'r');
+                stem(eye.cornea.PP2,   -1, 'Marker', '>', 'Color', 'r');
+                stem(eye.crystalline.PP1,  1, 'Marker', '<', 'Color', 'b');
+                stem(eye.crystalline.PP2, -1, 'Marker', '>', 'Color', 'b'); hold off
+
+                grid on; grid minor;
+                xlabel('Axial Position [mm]');
+                xlim([eye.cornea.z0-1 eye.reduced.al+1]);
+                ylim([-1.2 1.2]);
+                title('Principal Points');
+                legend('P', 'P''', 'P_{CO}', 'P_{CO}''', 'P_{CR}', 'P_{CR}''', 'Location', 'Best');
+            
+        end
+        
+    end
+    
+    methods(Static)
+        
+        function eye = computeCornea(eye)
+            
+            r0 = eye.r0 * eye.scale.r0;
+            r1 = eye.r1 * eye.scale.r1;
+
+            d01 = eye.d01 * eye.scale.d01;
+            
+            s = eye.scale.uniform;
+            n0 = eye.n0;
+            n1 = eye.n1;
+            n2 = eye.n2;
+
+            %% Cornea computations
+            
+            % Radii of curvature
+            r0 = r0 * s;                            % anterior radius
+            r1 = r1 * s;                            % posterior radius
+
+            % Axial positions
+            z0 = 0.000 * s;                       % apex (cornea anterior surface)
+            z1 = z0 + d01*s;                      % position of posterior surface
+            d01 = z1 - z0;                        % thickness of cornea
+
+            % Surface power
+            F0 = (n1 - n0)/r0;                          % 1E-3 [D]
+            F1 = (n2 - n1)/r1;                          % 1E-3 [D]
+
+            % Equivalent Power
+            F  = F0 + F1 - d01*F0*F1/n2;                % 1E-3 [D]
+
+            % Equivalent focal lengths
+            flo = -n0/F;                                % Object space [mm]
+            fli = n2/F;                                 % Image space [mm]
+
+            % Principal Points - relative to apex (origin)
+            PP1 = z0 + n0*(d01/n1)*F1/F;                % First Principal Point
+            PP2 = z0 - n2*(d01/n1)*F0/F + d01;          % Second Principal Point
+
+            % Focal Points
+            FP1 = PP1 + flo;                            % First Focal Point
+            FP2 = PP2 + fli;                            % Second Focal Point
+
+            eye.cornea = struct('r0',   r0,     'r1',  r1,...
+                                'z0',   z0,     'z1',  z1,...
+                                'n0',   n0,     'n1',  n1,      'n2',  n2,...
+                                'd01',  d01,...
+                                'F',    F,      'F0',  F0,      'F1',  F1,...
+                                'flo',  flo,    'fli', fli,...
+                                'PP1',  PP1,    'PP2', PP2,...
+                                'FP1',  FP1,    'FP2', FP2);
+        end
+        
+        function eye = computeCrystalline(eye)
+            
+            cornea = eye.cornea;
+            z1 = cornea.z1;
+            
+            r2 = eye.r2 * eye.scale.r2;         % anterior radius of curvature
+            r3 = eye.r3 * eye.scale.r3;         % posterior radius of curvature
+            
+            d12 = eye.d12 * eye.scale.d12;  % ACD = 
+            d23 = eye.d23 * eye.scale.d23;
+            
+            s = eye.scale.uniform;
+            n2 = eye.n2;
+            n3 = eye.n3;
+            n4 = eye.n4;
+                            
+            %% Crystalline computations
+            
+            % Radii of curvature
+            r2 = r2 * s;
+            r3 = r3 * s;
+
+            % Axial positions
+            z2 = z1 + d12*s;                 % 3.6mm for Emmetropic B&R eye
+            d12 = z2 - z1;   % second corneal surface to first lens surface
+
+            z3 = z2 + d23*s;                    % 7.3mm for Emmetropic eye
+            d23  = z3 - z2;
+
+            % Surface power
+            F2 = (n3 - n2)/r2;                  % 1E-3 [D] 
+            F3 = (n4 - n3)/r3;                  % 1E-3 [D]
+
+            % Equivalent power
+            F  = F2 + F3 - d23*F2*F3/n4;        % 1E-3 [D]
+
+            % Equivalent focal lengths
+            flo = -n2/F;                        % Object space [mm]
+            fli = n4/F;                         % Image space [mm]
+
+            % Principal Points - relative to apex (origin)
+            PP1 = z2 + n2*(d23/n3)*F3/F;        % First Principal Point
+            PP2 = z2 - n4*(d23/n3)*F2/F + d23;  % Second Principal Point
+
+            % Focal Points
+            FP1 = PP1 + flo;                    % First Focal Point
+            FP2 = PP2 + fli;                    % Second Focal Point
+            
+            % dioptric length of posterior chamber in 2-lens Gaussian model (LNT 17Apr2019)
+            al = eye.al * eye.scale.al * eye.scale.uniform;
+            z = al - PP2;                                       % Distance from 2nd PP of lens to retina.
+                                                                % Reduced length of vitreal chamber z'
+            k = n2/z;                                           % Dioptric length of the posterior chamber K'
+
+            eye.crystalline =struct('r2',   r2,     'r3',  r3,...
+                                    'z2',   z2,     'z3',  z3,...
+                                    'n2',   n2,     'n3',  n3,      'n4', n4,...
+                                    'd12',  d12,    'd23', d23,...
+                                    'F',    F,      'F2',  F2,      'F3',  F3,...
+                                    'flo',  flo,    'fli', fli,...
+                                    'PP1',  PP1,    'PP2', PP2,...
+                                    'FP1',  FP1,    'FP2', FP2,...
+                                    'z',    z,        'k',  k);
+            
+        end
+        
+        function eye = computeReduced(eye)
+            
+            %% Reduced eye system computations
+            
+            % Matt's beautiful ASCII Reduced eye:
+            %
+            % Ref. ID       n0   n1   n2
+            %                   /                                         \
+            %     o (object)   |                i(image)                  |
+            % -.-.-.-.-.-.-.-.-(.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-).-.-.-.-.-.-
+            %                  |                                          |
+            %                   \                                         /
+            % Surface ID        0                                      retina
+
+            cornea = eye.cornea;
+            crystalline = eye.crystalline;
+            
+            al = eye.al * eye.scale.al * eye.scale.uniform;
+
+            n0 = eye.n0;
+            n1 = eye.n2;
+            n2 = eye.n4;
+
+            d = crystalline.PP1 - cornea.PP2;  % separation of two thick lenses
+                % d is analogous to anterior chamber depth
+
+            % Equivalent
+            F = (cornea.F + crystalline.F - d * cornea.F * crystalline.F / n2);   % 1E-3 [D]
+            flo = -n0/F;
+            fli = n2/F;
+
+            PP1 = n0 * (d/n1) * crystalline.F/F + cornea.PP1;   % Position of 1st PP of system relative to apex of eye
+            PP2 =-n2 * (d/n1) * cornea.F/F + crystalline.PP2;   % Position of 2nd PP of system relative to apex of eye
+
+            z = al - PP2;                                       % Distance from 2nd PP of system to retina.
+                                                                % Reduced length of the eye z'
+            k = n2/z;                                           % Dioptric length of the eye K'
+            K = k - F;                                          % Refractive error of the eye
+
+            eye.reduced =struct('flo',  flo,    'fli',  fli,...
+                                'd',    d,...
+                                'F',    F,...
+                                'z',    z,...
+                                'k',    k,...
+                                'K',    K,...
+                                'al',   al,...
+                                'PP1',  PP1,    'PP2',  PP2);
+            
+            
+        end
+    end
+end
+
