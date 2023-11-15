@@ -789,7 +789,6 @@
     subplot(2,2,2);
     
         % Things to get out of the model
-        refractiveErrors  = zeros(length(scales),1);
         dioptricLengths  = zeros(length(scales),1);
         equivalentPowers = zeros(length(scales),1);
         
@@ -800,26 +799,24 @@
 
             eye = eye.rescale(scales(i));
 
-            refractiveErrors(i) = eye.getRefractiveError();
             dioptricLengths(i)  = eye.getDioptricLength();
             equivalentPowers(i) = eye.getEquivalentPower();
 
         end
 
-        %ratio = dioptricLengths./equivalentPowers;
-        plot(ages, refractiveErrors);
+        ratio = dioptricLengths./equivalentPowers;
+        plot(ages, ratio);
 
-        title('Example of uniform eye growth');
+        title('Example of uniform growth');
         
         xlabel('Age [years]');
-        ylabel('Refractive error [D]');
+        ylabel('Dioptric Length / Equiv. Power');
         
         grid on; grid minor;
    
-    subplot(2,2,3);
+    subplot(2,2,2);
     
         % Things to get out of the model
-        refractiveErrors  = zeros(length(scales),1);
         dioptricLengths  = zeros(length(scales),1);
         equivalentPowers = zeros(length(scales),1);
         
@@ -828,32 +825,30 @@
 
         for i = 1:length(ages)
 
-            individualScales = struct(...
-                'uniform',  1.0,... % keep this at 1.0 to prevent compounding scales
-                'r0',       scales(i),...
-                'r1',       scales(i),...
-                'd01',      scales(i),...
-                'd12',      scales(i),...
-                'r2',       scales(i),...
-                'r3',       scales(i),...
-                'd23',      scales(i),...
-                'al',       scales(i)*1.1);
+            scale = struct( 'uniform',  1.0,... % keep this at 1.0 to prevent compounding scales
+                            'r0',       scales(i),...
+                            'r1',       scales(i),...
+                            'd01',      scales(i),...
+                            'd12',      scales(i),...
+                            'r2',       scales(i),...
+                            'r3',       scales(i),...
+                            'd23',      scales(i),...
+                            'al',       scales(i)*1.001);
 
-            eye = eye.rescale([], individualScales); % first argument ("uniform") empty because not needed
+            eye = eye.rescale([], scales(i)); % first argument ("uniform") empty because not needed
 
-            refractiveErrors(i) = eye.getRefractiveError();
             dioptricLengths(i)  = eye.getDioptricLength();
             equivalentPowers(i) = eye.getEquivalentPower();
 
         end
 
-        %ratio = dioptricLengths./equivalentPowers;
-        plot(ages, refractiveErrors);
+        ratio = dioptricLengths./equivalentPowers;
+        plot(ages, ratio);
 
-        title('Example of uniform growth, except AL grows 1.1x faster');
+        title('Example of uniform growth, except AL grows faster');
         
         xlabel('Age [years]');
-        ylabel('Refractive error [D]');
+        ylabel('Dioptric Length / Equiv. Power');
         
         grid on; grid minor;
    

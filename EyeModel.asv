@@ -104,11 +104,13 @@ classdef EyeModel
         
         function eye = rescale(eye, uniform, scales)
 
-            if(~isempty(uniform))
-                eye.scale.uniform = uniform;
-            end
+            eye.scale.uniform = uniform;
 
             if(nargin == 3) 
+
+                if(~isempty(uniform))
+                    warning('Both "uniform" and "scales" arguments were supplied. The "uniform" argument will be overridden.');
+                end
 
                 fields = fieldnames(scales);
                 for f = 1:length(fields)
@@ -344,8 +346,8 @@ classdef EyeModel
             r3 = r3 * s;
 
             % Axial positions
-            z2 = z1 + d12*s;                    % 3.6mm for Emmetropic B&R eye
-            d12 = z2 - z1;                      % second corneal surface to first lens surface
+            z2 = z1 + d12*s;                 % 3.6mm for Emmetropic B&R eye
+            d12 = z2 - z1;   % second corneal surface to first lens surface
 
             z3 = z2 + d23*s;                    % 7.3mm for Emmetropic eye
             d23  = z3 - z2;
